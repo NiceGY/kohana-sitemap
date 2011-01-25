@@ -11,6 +11,13 @@ class Kohana_Sitemap
 	 * @var DOMElement
 	 */
 	protected $_root;
+	
+	/**
+	 * @var XSLTProcessor
+	 */
+	protected $_xslt;
+	
+	protected $_styles = array();
 
 	/**
 	 * Setup the XML document
@@ -19,6 +26,9 @@ class Kohana_Sitemap
 	{
 		// XML document
 		$this->_xml = new DOMDocument('1.0', Kohana::$charset);
+		
+		// XSLT 
+		$this->_xslt = new XSLTProcessor;
 
 		// Attributes
 		$this->_xml->formatOutput = TRUE;
@@ -42,6 +52,20 @@ class Kohana_Sitemap
 		
 		// Append URL to root element
 		$this->_root->appendChild($this->_xml->importNode($url, TRUE));
+	}
+	
+	/**
+	 * Add an XSL to the root XML document.
+	 * 
+	 * @param  string   $url
+	 * @param  constant Bitwise OR of the libxml option constants.
+	 * @return Sitemap 
+	 */
+	public function add_stylesheet($url, $options = NULL)
+	{
+		$this->_styles[] = array('location' => $url, 'options' => $options);
+		
+		return $this;
 	}
 	
 	/**
@@ -122,6 +146,7 @@ class Kohana_Sitemap
 	}
 
 	/**
+	 * 
 	 * Format a unix timestamp into W3C Datetime
 	 *
 	 * @access public
@@ -154,9 +179,23 @@ class Kohana_Sitemap
 	 */
 	public function render()
 	{
-		// Default uncompressed
-		$response = $this->_xml->saveXML();
-
+		if (empty($this->_styles))
+		{
+			$response = $this->_xml->saveXML();
+		}
+		else 
+		{
+			foreach($this->_styles as $style)
+			{
+				$xsl = new DOMDocument;
+				$xsl->load($style['location'], $style['options']);
+				
+				$this->_xslt->importStylesheet($xsl);
+			}
+			
+			$response = $this->_xslt->transformToXML($this->_xml);
+		}
+		
 		if ($this->gzip)
 		{
 			// Try and gzip the file before we send it off.
